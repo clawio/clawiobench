@@ -16,24 +16,65 @@ package cmd
 
 import (
 	"fmt"
-
+	pb "github.com/clawio/clawiobench/proto/metadata"
 	"github.com/spf13/cobra"
+	"golang.org/x/net/context"
+	"google.golang.org/grpc"
+	"os"
+	"text/tabwriter"
 )
 
-// statCmd represents the stat command
 var statCmd = &cobra.Command{
-	Use:   "stat",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
+	Use:   "stat <path>",
+	Short: "Stat a resource",
+	RunE:  stat,
+}
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		// TODO: Work your own magic here
-		fmt.Println("stat called")
-	},
+func stat(cmd *cobra.Command, args []string) error {
+
+	if len(args) != 1 {
+		cmd.Help()
+		return nil
+	}
+
+	token, err := getToken()
+	if err != nil {
+		return err
+	}
+
+	con, err := grpc.Dial(metaAddr, grpc.WithInsecure())
+	if err != nil {
+		return err
+	}
+
+	defer con.Close()
+
+	c := pb.NewMetaClient(con)
+
+	in := &pb.StatReq{}
+	in.AccessToken = token
+	in.Path = args[0]
+	in.Children = childrenFlag
+
+	ctx := context.Background()
+
+	res, err := c.Stat(ctx, in)
+	if err != nil {
+		return fmt.Errorf("Cannot stat resource: " + err.Error())
+	}
+
+	tabWriter := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	defer tabWriter.Flush()
+
+	fmt.Fprintln(tabWriter, "ID\tPath\tContainer\tSize\tModified\tPermissions\tETag\tMime\tChecksum")
+
+	fmt.Fprintf(tabWriter, "%s\t%s\t%t\t%d\t%d\t%d\t%s\t%s\t%s\n",
+		res.Id, res.Path, res.IsContainer, res.Size, res.Modified, res.Permissions, res.Etag, res.MimeType, res.Checksum)
+
+	for _, child := range res.GetChildren() {
+		fmt.Fprintf(tabWriter, "%s\t%s\t%t\t%d\t%d\t%d\t%s\t%s\t%s\n",
+			child.Id, child.Path, child.IsContainer, child.Size, child.Modified, child.Permissions, child.Etag, child.MimeType, child.Checksum)
+	}
 }
 
 func init() {

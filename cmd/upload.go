@@ -161,7 +161,7 @@ func doUpload(c *http.Client, fn, token string, wg *sync.WaitGroup) {
 	}
 
 	if res.StatusCode == 412 {
-		err := fmt.Errorf("Object %s was corrupted during upload and server did not save it\n")
+		err := fmt.Error("Object %s was corrupted during upload and server did not save it\n")
 		log.Error(err)
 	}
 	log.WithField("workerid", workerID).Info("FINISH")

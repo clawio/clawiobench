@@ -30,6 +30,7 @@ import (
 var cfgFile string
 var authAddr string
 var dataAddr string
+var metaAddr string
 var log *logrus.Logger
 
 // This represents the base command when called without any subcommands
@@ -91,6 +92,11 @@ func initConfig() {
 	dataAddr = viper.GetString("CLAWIO_BENCH_DATA_ADDR")
 	if dataAddr == "" {
 		fmt.Println("You have to specify the data unit address")
+		os.Exit(1)
+	}
+	metaAddr = viper.GetString("CLAWIO_BENCH_META_ADDR")
+	if metaAddr == "" {
+		fmt.Println("You have to specify the meta unit address")
 		os.Exit(1)
 	}
 }

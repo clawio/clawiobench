@@ -18,9 +18,6 @@
 			"Rev": "84b968cb9f82d727044973f8255489bbe15e9948"
 		},
 		{
-			"ImportPath": "github.com/clawio/clawio/proto/auth",
-			"Rev": "1b974e3d33a27526f9fc3ef5ffb630e3cd60fad1"
-		},
 		{
 			"ImportPath": "github.com/cpuguy83/go-md2man/md2man",
 			"Comment": "v1.0.4",
