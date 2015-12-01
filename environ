@@ -1,0 +1,3 @@
+export CLAWIO_BENCH_AUTH_ADDR=$(docker-machine ip default):57000
+export CLAWIO_BENCH_META_ADDR=$(docker-machine ip default):57001
+export CLAWIO_BENCH_DATA_ADDR=http://$(docker-machine ip default):57002
