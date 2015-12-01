@@ -15,7 +15,9 @@
 package main
 
 import "github.com/clawio/clawiobench/cmd"
+import "runtime"
 
 func main() {
+	runtime.GOMAXPROCS(runtime.NumCPU())
 	cmd.Execute()
 }

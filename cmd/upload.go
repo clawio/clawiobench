@@ -32,11 +32,19 @@ import (
 var countFlag int
 var bsFlag int
 var probesFlag int
+var concurrentFlag bool
 
 var uploadCmd = &cobra.Command{
 	Use:   "upload",
 	Short: "Benchmarks the uploading process using different object sizes",
 	RunE:  upload,
+	Long: `This benchmark test will measure the upload performance.
+
+The object size is the result of block size x count. This is the same
+approach used by dd.
+
+By default, uploads will be done sequentially. If you want your
+uploads to be performed in parallel set the --concurrent flag.`,
 }
 
 // createFile is a substitute for dd
@@ -98,47 +106,11 @@ func upload(cmd *cobra.Command, args []string) error {
 
 	for i := 0; i < probesFlag; i++ {
 		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-
-			workerID := uuid.New()
-			time.Sleep(time.Duration(rand.Int31n(1000)) * time.Millisecond)
-			log.WithField("workerid", workerID).Info("START")
-			// open again the file
-			lfd, err := os.Open(fn)
-			if err != nil {
-				log.Error(err)
-			}
-			// PUT will close the fd
-			// is it possible that the HTTP client is reusing connections so is being blocked?
-			req, err := http.NewRequest("PUT", dataAddr+"/local/users/d/demo/benchmark-file", lfd)
-			if err != nil {
-				log.Error(err)
-			}
-
-			req.Header.Add("Content-Type", "application/octet-stream")
-			req.Header.Add("Authorization", "Bearer "+token)
-			//req.Header.Add("CIO-Checksum", checksumFlag)
-
-			log.WithField("workerid", workerID).Info("START REQ")
-			res, err := c.Do(req)
-			if err != nil {
-				log.Error(err)
-			}
-
-			log.WithField("workerid", workerID).Info("END REQ")
-			err = res.Body.Close()
-			if err != nil {
-				log.Error(err)
-			}
-
-			if res.StatusCode == 412 {
-				err := fmt.Errorf("Object %s was corrupted during upload and server did not save it\n", args[0])
-				log.Error(err)
-			}
-			log.WithField("workerid", workerID).Info("FINISH")
-		}()
+		if concurrentFlag {
+			go doUpload(c, fn, token, &wg)
+		} else {
+			doUpload(c, fn, token, &wg)
+		}
 	}
 
 	wg.Wait()
@@ -153,6 +125,48 @@ func upload(cmd *cobra.Command, args []string) error {
 
 	return nil
 }
+
+func doUpload(c *http.Client, fn, token string, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	workerID := uuid.New()
+	time.Sleep(time.Duration(rand.Int31n(1000)) * time.Millisecond)
+	log.WithField("workerid", workerID).Info("START")
+	// open again the file
+	lfd, err := os.Open(fn)
+	if err != nil {
+		log.Error(err)
+	}
+	// PUT will close the fd
+	// is it possible that the HTTP client is reusing connections so is being blocked?
+	req, err := http.NewRequest("PUT", dataAddr+"/local/users/d/demo/benchmark-file", lfd)
+	if err != nil {
+		log.Error(err)
+	}
+
+	req.Header.Add("Content-Type", "application/octet-stream")
+	req.Header.Add("Authorization", "Bearer "+token)
+	//req.Header.Add("CIO-Checksum", checksumFlag)
+
+	log.WithField("workerid", workerID).Info("START REQ")
+	res, err := c.Do(req)
+	if err != nil {
+		log.Error(err)
+	}
+
+	log.WithField("workerid", workerID).Info("END REQ")
+	err = res.Body.Close()
+	if err != nil {
+		log.Error(err)
+	}
+
+	if res.StatusCode == 412 {
+		err := fmt.Errorf("Object %s was corrupted during upload and server did not save it\n")
+		log.Error(err)
+	}
+	log.WithField("workerid", workerID).Info("FINISH")
+}
+
 func init() {
 	RootCmd.AddCommand(uploadCmd)
 
@@ -169,5 +183,6 @@ func init() {
 	uploadCmd.Flags().IntVar(&countFlag, "count", 1024, "The number of blocks of the file")
 	uploadCmd.Flags().IntVar(&bsFlag, "bs", 1024, "The number of bytes of each block")
 	uploadCmd.Flags().IntVar(&probesFlag, "probes", 1, "The number of uploads")
+	uploadCmd.Flags().BoolVar(&concurrentFlag, "concurrent", false, "If set uploads will be performed concurrently")
 
 }
