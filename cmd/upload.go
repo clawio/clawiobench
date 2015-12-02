@@ -31,8 +31,6 @@ import (
 
 var countFlag int
 var bsFlag int
-var probesFlag int
-var concurrentFlag bool
 
 var uploadCmd = &cobra.Command{
 	Use:   "upload",
@@ -102,6 +100,7 @@ func upload(cmd *cobra.Command, args []string) error {
 	benchStart := time.Now()
 
 	var wg sync.WaitGroup
+
 	c := &http.Client{}
 
 	for i := 0; i < probesFlag; i++ {
@@ -161,7 +160,7 @@ func doUpload(c *http.Client, fn, token string, wg *sync.WaitGroup) {
 	}
 
 	if res.StatusCode == 412 {
-		err := fmt.Error("Object %s was corrupted during upload and server did not save it\n")
+		err := fmt.Errorf("Object %s was corrupted during upload and server did not save it\n")
 		log.Error(err)
 	}
 	log.WithField("workerid", workerID).Info("FINISH")

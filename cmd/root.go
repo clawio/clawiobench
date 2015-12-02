@@ -27,6 +27,9 @@ import (
 	"path"
 )
 
+var probesFlag int
+var concurrentFlag bool
+
 var cfgFile string
 var authAddr string
 var dataAddr string
@@ -61,6 +64,8 @@ func init() {
 	// will be global for your application.
 
 	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.clawiobench.yaml)")
+	RootCmd.PersistentFlags().IntVar(&probesFlag, "probes", 1, "The number of tests to perform")
+	RootCmd.PersistentFlags().BoolVar(&concurrentFlag, "concurrent", false, "If set operations are run concurrently")
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	// RootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")

@@ -20,9 +20,11 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-	"os"
-	"text/tabwriter"
+	"sync"
+	"time"
 )
+
+var childrenFlag bool
 
 var statCmd = &cobra.Command{
 	Use:   "stat <path>",
@@ -51,29 +53,41 @@ func stat(cmd *cobra.Command, args []string) error {
 
 	c := pb.NewMetaClient(con)
 
+	benchStart := time.Now()
+
+	wg := sync.WaitGroup{}
+
+	for i := 0; i < probesFlag; i++ {
+		wg.Add(1)
+		if concurrentFlag {
+			go doStat(c, token, args[0], &wg)
+		} else {
+			doStat(c, token, args[0], &wg)
+		}
+	}
+
+	wg.Wait()
+
+	benchEnd := time.Since(benchStart)
+	fmt.Printf("Total time: %f s\n", benchEnd.Seconds())
+	fmt.Printf("Average stat rate: %f ops/s\n", float64(probesFlag)/benchEnd.Seconds())
+
+	return nil
+}
+
+func doStat(c pb.MetaClient, path, token string, wg *sync.WaitGroup) {
+	defer wg.Done()
+	log.Info("START")
 	in := &pb.StatReq{}
 	in.AccessToken = token
-	in.Path = args[0]
+	in.Path = path
 	in.Children = childrenFlag
 
 	ctx := context.Background()
 
-	res, err := c.Stat(ctx, in)
+	_, err := c.Stat(ctx, in)
 	if err != nil {
-		return fmt.Errorf("Cannot stat resource: " + err.Error())
-	}
-
-	tabWriter := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	defer tabWriter.Flush()
-
-	fmt.Fprintln(tabWriter, "ID\tPath\tContainer\tSize\tModified\tPermissions\tETag\tMime\tChecksum")
-
-	fmt.Fprintf(tabWriter, "%s\t%s\t%t\t%d\t%d\t%d\t%s\t%s\t%s\n",
-		res.Id, res.Path, res.IsContainer, res.Size, res.Modified, res.Permissions, res.Etag, res.MimeType, res.Checksum)
-
-	for _, child := range res.GetChildren() {
-		fmt.Fprintf(tabWriter, "%s\t%s\t%t\t%d\t%d\t%d\t%s\t%s\t%s\n",
-			child.Id, child.Path, child.IsContainer, child.Size, child.Modified, child.Permissions, child.Etag, child.MimeType, child.Checksum)
+		log.Errorf("Cannot stat resource: " + err.Error())
 	}
 }
 
@@ -90,4 +104,5 @@ func init() {
 	// is called directly, e.g.:
 	// statCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 
+	statCmd.Flags().BoolVarP(&childrenFlag, "children", "", false, "Show children objects inside container")
 }
