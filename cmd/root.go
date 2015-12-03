@@ -29,6 +29,7 @@ import (
 
 var probesFlag int
 var concurrentFlag bool
+var concurrencyFlag int
 
 var cfgFile string
 var authAddr string
@@ -66,6 +67,13 @@ func init() {
 	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.clawiobench.yaml)")
 	RootCmd.PersistentFlags().IntVar(&probesFlag, "probes", 1, "The number of tests to perform")
 	RootCmd.PersistentFlags().BoolVar(&concurrentFlag, "concurrent", false, "If set operations are run concurrently")
+	RootCmd.PersistentFlags().IntVar(&concurrencyFlag, "concurrency", 1, "The number of concurrent operations")
+	if concurrencyFlag > probesFlag {
+		concurrencyFlag = probesFlag
+	}
+	if concurrencyFlag == 0 {
+		concurrencyFlag++
+	}
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	// RootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")

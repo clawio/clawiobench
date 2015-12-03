@@ -16,11 +16,11 @@ package cmd
 
 import (
 	"fmt"
+	br "github.com/cheggaaa/pb"
 	pb "github.com/clawio/clawiobench/proto/metadata"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-	"sync"
 	"time"
 )
 
@@ -28,7 +28,7 @@ var childrenFlag bool
 
 var statCmd = &cobra.Command{
 	Use:   "stat <path>",
-	Short: "Stat a resource",
+	Short: "Benchmark getting resource information using stat",
 	RunE:  stat,
 }
 
@@ -48,47 +48,76 @@ func stat(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-
 	defer con.Close()
 
 	c := pb.NewMetaClient(con)
 
 	benchStart := time.Now()
 
-	wg := sync.WaitGroup{}
+	total := 0
+	errorProbes := 0
+
+	errChan := make(chan error)
+	resChan := make(chan string)
+	doneChan := make(chan bool)
+	limitChan := make(chan int, concurrencyFlag)
+
+	for i := 0; i < concurrencyFlag; i++ {
+		limitChan <- 1
+	}
+
+	bar := br.StartNew(probesFlag)
 
 	for i := 0; i < probesFlag; i++ {
-		wg.Add(1)
-		if concurrentFlag {
-			go doStat(c, token, args[0], &wg)
-		} else {
-			doStat(c, token, args[0], &wg)
+		go func() {
+			<-limitChan
+			defer func() {
+				limitChan <- 1
+			}()
+			in := &pb.StatReq{}
+			in.AccessToken = token
+			in.Path = args[0]
+			in.Children = childrenFlag
+			ctx := context.Background()
+			_, err := c.Stat(ctx, in)
+			if err != nil {
+				errChan <- err
+				return
+			}
+			doneChan <- true
+			resChan <- ""
+		}()
+	}
+
+	for {
+		select {
+		case _ = <-doneChan:
+			total++
+			bar.Increment()
+		case res := <-resChan:
+			log.Printf("Worker %s has finished", res)
+		case err := <-errChan:
+			log.Error(err)
+			errorProbes++
+			total++
+			bar.Increment()
+		}
+		if total == probesFlag {
+			break
 		}
 	}
 
-	wg.Wait()
+	bar.Finish()
 
 	benchEnd := time.Since(benchStart)
+	fmt.Printf("Total number of probes: %d\n", probesFlag)
+	fmt.Printf("Concurrency level: %d\n", concurrencyFlag)
+	fmt.Printf("Total number of failed probes: %d\n", errorProbes)
 	fmt.Printf("Total time: %f s\n", benchEnd.Seconds())
-	fmt.Printf("Average stat rate: %f ops/s\n", float64(probesFlag)/benchEnd.Seconds())
+	fmt.Printf("Average ops number per second: %f req/s\n", float64(probesFlag)/benchEnd.Seconds())
+	fmt.Printf("Average time per op: %f s\n", benchEnd.Seconds()/float64(probesFlag))
 
 	return nil
-}
-
-func doStat(c pb.MetaClient, path, token string, wg *sync.WaitGroup) {
-	defer wg.Done()
-	log.Info("START")
-	in := &pb.StatReq{}
-	in.AccessToken = token
-	in.Path = path
-	in.Children = childrenFlag
-
-	ctx := context.Background()
-
-	_, err := c.Stat(ctx, in)
-	if err != nil {
-		log.Errorf("Cannot stat resource: " + err.Error())
-	}
 }
 
 func init() {
