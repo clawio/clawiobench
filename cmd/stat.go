@@ -15,12 +15,14 @@
 package cmd
 
 import (
+	"encoding/csv"
 	"fmt"
 	br "github.com/cheggaaa/pb"
 	pb "github.com/clawio/clawiobench/proto/metadata"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"os"
 	"time"
 )
 
@@ -109,14 +111,28 @@ func stat(cmd *cobra.Command, args []string) error {
 
 	bar.Finish()
 
-	benchEnd := time.Since(benchStart)
-	fmt.Printf("Total number of probes: %d\n", probesFlag)
-	fmt.Printf("Concurrency level: %d\n", concurrencyFlag)
-	fmt.Printf("Total number of failed probes: %d\n", errorProbes)
-	fmt.Printf("Total time: %f s\n", benchEnd.Seconds())
-	fmt.Printf("Average ops number per second: %f req/s\n", float64(probesFlag)/benchEnd.Seconds())
-	fmt.Printf("Average time per op: %f s\n", benchEnd.Seconds()/float64(probesFlag))
+	numberRequests := probesFlag
+	concurrency := concurrencyFlag
+	totalTime := time.Since(benchStart).Seconds()
+	failedRequests := errorProbes
+	frequency := float64(numberRequests) / totalTime
+	period := float64(1 / frequency)
 
+	data := [][]string{
+		{"NUMBER", "CONCURRENCY", "TIME", "FAILED", "FREQ", "PERIOD"},
+		{fmt.Sprintf("%d", numberRequests), fmt.Sprintf("%d", concurrency), fmt.Sprintf("%f", totalTime), fmt.Sprintf("%d", failedRequests), fmt.Sprintf("%f", frequency), fmt.Sprintf("%f", period)},
+	}
+	w := csv.NewWriter(os.Stdout)
+	for _, d := range data {
+		if err := w.Write(d); err != nil {
+			return err
+		}
+	}
+	w.Flush()
+
+	if err := w.Error(); err != nil {
+		return err
+	}
 	return nil
 }
 

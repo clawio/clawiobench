@@ -28,8 +28,8 @@ import (
 )
 
 var probesFlag int
-var concurrentFlag bool
 var concurrencyFlag int
+var csvFile string
 
 var cfgFile string
 var authAddr string
@@ -40,8 +40,10 @@ var log *logrus.Logger
 // This represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
 	Use:   "clawiobench",
-	Short: "ClawIO Benchmarking Tool",
-	Long:  `This tools benchmarks different actions that can be performed against ClawIO.`,
+	Short: "ClawIO Cloud Synchronisation Benchmarking Framework",
+	Long: `clawiobench is a tool for benchmarking your ClawIO gRPC and HTTP based server.
+It is designed to give you an impression of how your current ClawIO installation performs.
+This especially shows you how many requests per second your ClawIO installation is capable of serving.`,
 
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
@@ -64,16 +66,10 @@ func init() {
 	// Cobra supports Persistent Flags, which, if defined here,
 	// will be global for your application.
 
-	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.clawiobench.yaml)")
-	RootCmd.PersistentFlags().IntVar(&probesFlag, "probes", 1, "The number of tests to perform")
-	RootCmd.PersistentFlags().BoolVar(&concurrentFlag, "concurrent", false, "If set operations are run concurrently")
-	RootCmd.PersistentFlags().IntVar(&concurrencyFlag, "concurrency", 1, "The number of concurrent operations")
-	if concurrencyFlag > probesFlag {
-		concurrencyFlag = probesFlag
-	}
-	if concurrencyFlag == 0 {
-		concurrencyFlag++
-	}
+	RootCmd.PersistentFlags().IntVarP(&probesFlag, "requests", "n", 1, "Number of requests to perform for the benchmarking session. The default is to just perform a single request which usually leads to non-representative benchmarking results.")
+	RootCmd.PersistentFlags().IntVarP(&concurrencyFlag, "concurrency", "c", 1, "Number of multiple requests to perform at a time. Default is one request at a time.")
+	RootCmd.PersistentFlags().StringVarP(&csvFile, "csv-file", "e", "", "Write a Comma separated value (CSV) file which contains for each percentage (from 1% to 100%) the time (in milliseconds) it took to serve that percentage of the requests.")
+
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	// RootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
