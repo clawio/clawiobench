@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"fmt"
-	pb "github.com/clawio/clawio/proto/auth"
+	pb "github.com/clawio/clawiobench/proto/auth"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
