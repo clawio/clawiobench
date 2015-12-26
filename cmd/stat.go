@@ -102,14 +102,18 @@ func stat(cmd *cobra.Command, args []string) error {
 			log.Error(err)
 			errorProbes++
 			total++
-			bar.Increment()
+			if !noProgressBar {
+				bar.Increment()
+			}
 		}
 		if total == probesFlag {
 			break
 		}
 	}
 
-	bar.Finish()
+	if !noProgressBar {
+		bar.Finish()
+	}
 
 	numberRequests := probesFlag
 	concurrency := concurrencyFlag
