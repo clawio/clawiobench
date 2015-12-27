@@ -18,10 +18,10 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-
-	"github.com/Sirupsen/logrus"
+	"io"
 	"io/ioutil"
 	"os/user"
 	"path"
@@ -37,6 +37,7 @@ var authAddr string
 var dataAddr string
 var metaAddr string
 var log *logrus.Logger
+var output io.Writer
 
 // This represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
@@ -69,7 +70,7 @@ func init() {
 
 	RootCmd.PersistentFlags().IntVarP(&probesFlag, "requests", "n", 1, "Number of requests to perform for the benchmarking session. The default is to just perform a single request which usually leads to non-representative benchmarking results.")
 	RootCmd.PersistentFlags().IntVarP(&concurrencyFlag, "concurrency", "c", 1, "Number of multiple requests to perform at a time. Default is one request at a time.")
-	RootCmd.PersistentFlags().StringVarP(&csvFile, "csv-file", "e", "", "Write a Comma separated value (CSV) file which contains for each percentage (from 1% to 100%) the time (in milliseconds) it took to serve that percentage of the requests.")
+	RootCmd.PersistentFlags().StringVarP(&csvFile, "csv-file", "e", "", "Write the results to  a Comma separated value (CSV) file.")
 	RootCmd.PersistentFlags().BoolVar(&progressBar, "progress-bar", true, "Show progress bar")
 
 	// Cobra also supports local flags, which will only run
@@ -109,6 +110,17 @@ func initConfig() {
 	if metaAddr == "" {
 		fmt.Println("You have to specify the meta unit address")
 		os.Exit(1)
+	}
+
+	if csvFile != "" {
+		fd, err := os.Create(csvFile)
+		if err != nil {
+			fmt.Printf("Cannot open csv file: %s\n", err.Error())
+			os.Exit(1)
+		}
+		output = fd
+	} else {
+		output = os.Stdout
 	}
 }
 
