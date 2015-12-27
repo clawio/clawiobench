@@ -30,7 +30,7 @@ import (
 var probesFlag int
 var concurrencyFlag int
 var csvFile string
-var noProgressBar bool
+var progressBar bool
 
 var cfgFile string
 var authAddr string
@@ -70,7 +70,7 @@ func init() {
 	RootCmd.PersistentFlags().IntVarP(&probesFlag, "requests", "n", 1, "Number of requests to perform for the benchmarking session. The default is to just perform a single request which usually leads to non-representative benchmarking results.")
 	RootCmd.PersistentFlags().IntVarP(&concurrencyFlag, "concurrency", "c", 1, "Number of multiple requests to perform at a time. Default is one request at a time.")
 	RootCmd.PersistentFlags().StringVarP(&csvFile, "csv-file", "e", "", "Write a Comma separated value (CSV) file which contains for each percentage (from 1% to 100%) the time (in milliseconds) it took to serve that percentage of the requests.")
-	RootCmd.PersistentFlags().BoolVar(&noProgressBar, "no-progress-bar", false, "Do not show the progress bar")
+	RootCmd.PersistentFlags().BoolVar(&progressBar, "progress-bar", true, "Show progress bar")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
