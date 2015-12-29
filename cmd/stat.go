@@ -123,10 +123,11 @@ func stat(cmd *cobra.Command, args []string) error {
 	period := float64(1 / frequency)
 
 	data := [][]string{
-		{"NUMBER", "CONCURRENCY", "TIME", "FAILED", "FREQ", "PERIOD"},
+		{"#NUMBER", "CONCURRENCY", "TIME", "FAILED", "FREQ", "PERIOD"},
 		{fmt.Sprintf("%d", numberRequests), fmt.Sprintf("%d", concurrency), fmt.Sprintf("%f", totalTime), fmt.Sprintf("%d", failedRequests), fmt.Sprintf("%f", frequency), fmt.Sprintf("%f", period)},
 	}
 	w := csv.NewWriter(os.Stdout)
+	w.Comma = ' '
 	for _, d := range data {
 		if err := w.Write(d); err != nil {
 			return err
