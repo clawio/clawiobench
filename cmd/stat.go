@@ -68,7 +68,10 @@ func stat(cmd *cobra.Command, args []string) error {
 		limitChan <- 1
 	}
 
-	bar := br.StartNew(probesFlag)
+	var bar *br.ProgressBar
+	if progressBar {
+		bar = br.StartNew(probesFlag)
+	}
 
 	for i := 0; i < probesFlag; i++ {
 		go func() {
@@ -95,14 +98,16 @@ func stat(cmd *cobra.Command, args []string) error {
 		select {
 		case _ = <-doneChan:
 			total++
-			bar.Increment()
+			if progressBar {
+				bar.Increment()
+			}
 		case res := <-resChan:
 			log.Printf("Worker %s has finished", res)
 		case err := <-errChan:
 			log.Error(err)
 			errorProbes++
 			total++
-			if !noProgressBar {
+			if progressBar {
 				bar.Increment()
 			}
 		}
@@ -111,7 +116,7 @@ func stat(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if !noProgressBar {
+	if progressBar {
 		bar.Finish()
 	}
 
@@ -119,7 +124,7 @@ func stat(cmd *cobra.Command, args []string) error {
 	concurrency := concurrencyFlag
 	totalTime := time.Since(benchStart).Seconds()
 	failedRequests := errorProbes
-	frequency := float64(numberRequests) / totalTime
+	frequency := float64(numberRequests-failedRequests) / totalTime
 	period := float64(1 / frequency)
 
 	data := [][]string{
