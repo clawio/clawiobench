@@ -123,7 +123,7 @@ func stat(cmd *cobra.Command, args []string) error {
 	concurrency := concurrencyFlag
 	totalTime := time.Since(benchStart).Seconds()
 	failedRequests := errorProbes
-	frequency := float64(numberRequests) / totalTime
+	frequency := float64(numberRequests-failedRequests) / totalTime
 	period := float64(1 / frequency)
 
 	data := [][]string{
