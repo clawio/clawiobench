@@ -48,7 +48,7 @@ approach used by dd.`,
 func createFile(fn, char string, count, bs int) (*os.File, error) {
 	var fd *os.File
 	if fn == "" {
-		tf, err := ioutil.TempFile("", "clawiobench-")
+		tf, err := ioutil.TempFile("", "CLAWIOBENCH-")
 		if err != nil {
 			return nil, err
 		}
@@ -94,19 +94,19 @@ func upload(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fd, err := createFile("", "1", countFlag, bsFlag) // 1GB file
-	if err != nil {
-		log.Error(err)
-		return err
+	fns := []string{}
+	for i := 0; i < probesFlag; i++ {
+		fd, err := createFile(fmt.Sprintf("testfile-%d", i), "1", countFlag, bsFlag)
+		if err != nil {
+			log.Error(err)
+			return err
+		}
+		defer func() {
+			fd.Close()
+			os.RemoveAll(fd.Name())
+		}()
+		fns = append(fns, fd.Name())
 	}
-	defer func() {
-		fd.Close()
-		os.RemoveAll(fd.Name())
-	}()
-
-	fn := fd.Name()
-	fmt.Println("Test file is " + fn)
-	fmt.Printf("File size is %d megabytes\n", countFlag*bsFlag/1024/1024)
 
 	benchStart := time.Now()
 
@@ -124,12 +124,12 @@ func upload(cmd *cobra.Command, args []string) error {
 
 	var bar *pb.ProgressBar
 	if progressBar {
+		fmt.Printf("File size is %d megabytes\n", countFlag*bsFlag/1024/1024)
 		bar = pb.StartNew(probesFlag)
 	}
 
-	c := &http.Client{} // connections are reused if we reuse the client
 	for i := 0; i < probesFlag; i++ {
-		go func() {
+		go func(fn string) {
 			<-limitChan
 			defer func() {
 				limitChan <- 1
@@ -140,6 +140,7 @@ func upload(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				errChan <- err
 			}
+			c := &http.Client{} // connections are reused if we reuse the client
 			// PUT will close the fd
 			// is it possible that the HTTP client is reusing connections so is being blocked?
 			req, err := http.NewRequest("PUT", dataAddr+args[0], lfd)
@@ -173,7 +174,7 @@ func upload(cmd *cobra.Command, args []string) error {
 			doneChan <- true
 			resChan <- ""
 			return
-		}()
+		}(fns[i])
 	}
 
 	for {
