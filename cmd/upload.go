@@ -16,7 +16,7 @@ package cmd
 
 import (
 	"bytes"
-	"code.google.com/p/go-uuid/uuid"
+	"encoding/csv"
 	"fmt"
 	"github.com/cheggaaa/pb"
 	"github.com/spf13/cobra"
@@ -29,6 +29,7 @@ import (
 
 var countFlag int
 var bsFlag int
+var checksumFlag string
 
 var uploadCmd = &cobra.Command{
 	Use:   "upload",
@@ -98,7 +99,10 @@ func upload(cmd *cobra.Command, args []string) error {
 		log.Error(err)
 		return err
 	}
-	defer fd.Close()
+	defer func() {
+		fd.Close()
+		os.RemoveAll(fd.Name())
+	}()
 
 	fn := fd.Name()
 	fmt.Println("Test file is " + fn)
@@ -110,26 +114,26 @@ func upload(cmd *cobra.Command, args []string) error {
 	errorProbes := 0
 
 	errChan := make(chan error)
-	doneChan := make(chan string)
+	resChan := make(chan string)
+	doneChan := make(chan bool)
 	limitChan := make(chan int, concurrencyFlag)
 
 	for i := 0; i < concurrencyFlag; i++ {
 		limitChan <- 1
 	}
 
-	bar := pb.StartNew(probesFlag)
+	var bar *pb.ProgressBar
+	if progressBar {
+		bar = pb.StartNew(probesFlag)
+	}
 
 	c := &http.Client{} // connections are reused if we reuse the client
 	for i := 0; i < probesFlag; i++ {
 		go func() {
-			workerID := uuid.New()
 			<-limitChan
 			defer func() {
-				log.WithField("workerid", workerID).Info("END")
 				limitChan <- 1
 			}()
-
-			log.WithField("workerid", workerID).Info("START")
 
 			// open again the file
 			lfd, err := os.Open(fn)
@@ -146,7 +150,7 @@ func upload(cmd *cobra.Command, args []string) error {
 
 			req.Header.Add("Content-Type", "application/octet-stream")
 			req.Header.Add("Authorization", "Bearer "+token)
-			//req.Header.Add("CIO-Checksum", checksumFlag)
+			req.Header.Add("CIO-Checksum", checksumFlag)
 
 			res, err := c.Do(req)
 			if err != nil {
@@ -166,7 +170,8 @@ func upload(cmd *cobra.Command, args []string) error {
 				return
 			}
 
-			doneChan <- workerID
+			doneChan <- true
+			resChan <- ""
 			return
 		}()
 	}
@@ -175,12 +180,18 @@ func upload(cmd *cobra.Command, args []string) error {
 		select {
 		case _ = <-doneChan:
 			total++
-			bar.Increment()
+			if progressBar {
+				bar.Increment()
+			}
+		case res := <-resChan:
+			log.Printf("Worker %s has finished", res)
 		case err := <-errChan:
 			log.Error(err)
 			errorProbes++
 			total++
-			bar.Increment()
+			if progressBar {
+				bar.Increment()
+			}
 		}
 
 		if total == probesFlag {
@@ -188,18 +199,34 @@ func upload(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	bar.Finish()
+	if progressBar {
+		bar.Finish()
+	}
 
-	benchEnd := time.Since(benchStart)
-	fmt.Printf("Total number of probes: %d\n", probesFlag)
-	fmt.Printf("Concurrency level: %d\n", concurrencyFlag)
-	fmt.Printf("Failed ops: %d\n", errorProbes)
-	fmt.Printf("Total time spent: %f s\n", benchEnd.Seconds())
-	fmt.Printf("Ops rate: %f Hz\n", float64(probesFlag)/benchEnd.Seconds())
-	fmt.Printf("Average time per op: %f s\n", benchEnd.Seconds()/float64(probesFlag))
+	numberRequests := probesFlag
+	concurrency := concurrencyFlag
+	totalTime := time.Since(benchStart).Seconds()
+	failedRequests := errorProbes
+	frequency := float64(numberRequests-failedRequests) / totalTime
+	period := float64(1 / frequency)
+	volume := numberRequests * countFlag * bsFlag / 1024 / 1024
+	throughput := float64(volume) / totalTime
+	data := [][]string{
+		{"#NUMBER", "CONCURRENCY", "TIME", "FAILED", "FREQ", "PERIOD", "VOLUME", "THROUGHPUT"},
+		{fmt.Sprintf("%d", numberRequests), fmt.Sprintf("%d", concurrency), fmt.Sprintf("%f", totalTime), fmt.Sprintf("%d", failedRequests), fmt.Sprintf("%f", frequency), fmt.Sprintf("%f", period), fmt.Sprintf("%d", volume), fmt.Sprintf("%f", throughput)},
+	}
+	w := csv.NewWriter(output)
+	w.Comma = ' '
+	for _, d := range data {
+		if err := w.Write(d); err != nil {
+			return err
+		}
+	}
+	w.Flush()
 
-	fmt.Printf("Data volume uploaded: %d megabytes\n", countFlag*bsFlag*probesFlag/1024/1024)
-	fmt.Printf("Average upload speed: %f megabytes/s\n", float64((countFlag*bsFlag*probesFlag/1024/1024))/benchEnd.Seconds())
+	if err := w.Error(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -218,5 +245,6 @@ func init() {
 
 	uploadCmd.Flags().IntVar(&countFlag, "count", 1024, "The number of blocks of the file")
 	uploadCmd.Flags().IntVar(&bsFlag, "bs", 1024, "The number of bytes of each block")
+	uploadCmd.Flags().StringVar(&checksumFlag, "checksum", "", "The checksum for the file")
 
 }
