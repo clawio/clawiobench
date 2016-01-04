@@ -184,8 +184,7 @@ func upload(cmd *cobra.Command, args []string) error {
 			if progressBar {
 				bar.Increment()
 			}
-		case res := <-resChan:
-			log.Printf("Worker %s has finished", res)
+		case _ = <-resChan:
 		case err := <-errChan:
 			log.Error(err)
 			errorProbes++
