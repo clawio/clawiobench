@@ -21,6 +21,7 @@ import (
 	"github.com/cheggaaa/pb"
 	"github.com/spf13/cobra"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"os"
 	"path"
@@ -30,6 +31,7 @@ import (
 var countFlag int
 var bsFlag int
 var checksumFlag string
+var cernDistributionFlag bool
 
 var uploadCmd = &cobra.Command{
 	Use:   "upload",
@@ -75,6 +77,117 @@ func createFile(fn, char string, count, bs int) (*os.File, error) {
 	return fd, nil
 }
 
+// This is the distribution of files at CERN
+func createCERNDistribution() ([]string, error) {
+	fds := []*os.File{}
+	fns := []string{}
+	fd50MB, err := createFile("testfile-50MB", "1", 1024, 1024*50)
+	if err != nil {
+		return fns, err
+	}
+	fds = append(fds, fd50MB)
+
+	fd15MB, err := createFile("testfile-15MB", "1", 1024, 1024*15)
+	if err != nil {
+		return fns, err
+	}
+	fds = append(fds, fd15MB)
+
+	fd8MB, err := createFile("testfile-8MB", "1", 1024, 1024*8)
+	if err != nil {
+		return fns, err
+	}
+	fds = append(fds, fd8MB)
+
+	fd10MB, err := createFile("testfile-8MB", "1", 1024, 1024*10)
+	if err != nil {
+		return fns, err
+	}
+	fds = append(fds, fd10MB)
+
+	fd5MB, err := createFile("testfile-5MB", "1", 1024, 1024*5)
+	if err != nil {
+		return fns, err
+	}
+	fds = append(fds, fd5MB)
+
+	fd4MB, err := createFile("testfile-4MB", "1", 1024, 1024*4)
+	if err != nil {
+		return fns, err
+	}
+	fds = append(fds, fd4MB)
+
+	fd3MB, err := createFile("testfile-3MB", "1", 1024, 1024*3)
+	if err != nil {
+		return fns, err
+	}
+	fds = append(fds, fd3MB)
+
+	fd2MB, err := createFile("testfile-2MB", "1", 1024, 1024*2)
+	if err != nil {
+		return fns, err
+	}
+	fds = append(fds, fd2MB)
+
+	fd1MB, err := createFile("testfile-1MB", "1", 1024, 1024)
+	if err != nil {
+		return fns, err
+	}
+	fds = append(fds, fd1MB)
+
+	for i := 0; i < 11; i++ {
+		fn := fmt.Sprintf("testfile-500KB-%d", i)
+		fd, err := createFile(fn, "1", 1024, 500)
+		if err != nil {
+			return fns, err
+		}
+		fds = append(fds, fd)
+	}
+
+	for i := 0; i < 32; i++ {
+		fn := fmt.Sprintf("testfile-50KB-%d", i)
+		fd, err := createFile(fn, "1", 1024, 50)
+		if err != nil {
+			return fns, err
+		}
+		fds = append(fds, fd)
+	}
+
+	for i := 0; i < 28; i++ {
+		fn := fmt.Sprintf("testfile-5KB-%d", i)
+		fd, err := createFile(fn, "1", 1024, 5)
+		if err != nil {
+			return fns, err
+		}
+		fds = append(fds, fd)
+	}
+
+	for i := 0; i < 15; i++ {
+		fn := fmt.Sprintf("testfile-1KB-%d", i)
+		fd, err := createFile(fn, "1", 1024, 1)
+		if err != nil {
+			return fns, err
+		}
+		fds = append(fds, fd)
+	}
+
+	for i := 0; i < 5; i++ {
+		fn := fmt.Sprintf("testfile-100B-%d", i)
+		fd, err := createFile(fn, "1", 1, 100)
+		if err != nil {
+			return fns, err
+		}
+		fds = append(fds, fd)
+	}
+
+	for _, v := range fds {
+		fns = append(fns, v.Name())
+		v.Close()
+	}
+
+	return fns, nil
+}
+
 func upload(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
 		cmd.Help()
@@ -94,19 +207,27 @@ func upload(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fns := []string{}
-	for i := 0; i < probesFlag; i++ {
-		fd, err := createFile(fmt.Sprintf("testfile-%d", i), "1", countFlag, bsFlag)
+	var fns []string
+	if cernDistributionFlag {
+		vals, err := createCERNDistribution()
 		if err != nil {
-			log.Error(err)
 			return err
 		}
-		defer func() {
-			fd.Close()
-			os.RemoveAll(fd.Name())
-		}()
+		fns = vals
+	} else {
+		fd, err := createFile(fmt.Sprintf("testfile-manual-count-%d-bs-%d", countFlag, bsFlag), "1", countFlag, bsFlag)
+		if err != nil {
+			return err
+		}
 		fns = append(fns, fd.Name())
+		fd.Close()
 	}
+
+	defer func() {
+		for _, v := range fns {
+			os.RemoveAll(v)
+		}
+	}()
 
 	benchStart := time.Now()
 
@@ -124,7 +245,7 @@ func upload(cmd *cobra.Command, args []string) error {
 
 	var bar *pb.ProgressBar
 	if progressBar {
-		fmt.Printf("File size is %d megabytes\n", countFlag*bsFlag/1024/1024)
+		fmt.Printf("There are %d filenames: %+v\n", len(fns), fns)
 		bar = pb.StartNew(probesFlag)
 	}
 
@@ -140,6 +261,8 @@ func upload(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				errChan <- err
 			}
+			defer lfd.Close()
+
 			c := &http.Client{} // connections are reused if we reuse the client
 			// PUT will close the fd
 			// is it possible that the HTTP client is reusing connections so is being blocked?
@@ -174,7 +297,7 @@ func upload(cmd *cobra.Command, args []string) error {
 			doneChan <- true
 			resChan <- ""
 			return
-		}(fns[i])
+		}(fns[rand.Intn(len(fns))])
 	}
 
 	for {
@@ -246,5 +369,6 @@ func init() {
 	uploadCmd.Flags().IntVar(&countFlag, "count", 1024, "The number of blocks of the file")
 	uploadCmd.Flags().IntVar(&bsFlag, "bs", 1024, "The number of bytes of each block")
 	uploadCmd.Flags().StringVar(&checksumFlag, "checksum", "", "The checksum for the file")
+	uploadCmd.Flags().BoolVar(&cernDistributionFlag, "cern-distribution", false, "Use file sizes that follow the distribution found on CERNBox")
 
 }
