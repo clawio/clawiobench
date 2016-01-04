@@ -219,7 +219,7 @@ func upload(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		fns = append(fns, fd.Name())
+		fns = []string{fd.Name()}
 		fd.Close()
 	}
 
@@ -245,11 +245,13 @@ func upload(cmd *cobra.Command, args []string) error {
 
 	var bar *pb.ProgressBar
 	if progressBar {
-		fmt.Printf("There are %d filenames: %+v\n", len(fns), fns)
+		fmt.Printf("There are %d possible files to upload\n", len(fns))
 		bar = pb.StartNew(probesFlag)
 	}
 
 	for i := 0; i < probesFlag; i++ {
+		rand.Seed(time.Now().UnixNano())
+		filename := fns[rand.Intn(len(fns))]
 		go func(fn string) {
 			<-limitChan
 			defer func() {
@@ -297,7 +299,7 @@ func upload(cmd *cobra.Command, args []string) error {
 			doneChan <- true
 			resChan <- ""
 			return
-		}(fns[rand.Intn(len(fns))])
+		}(filename)
 	}
 
 	for {
