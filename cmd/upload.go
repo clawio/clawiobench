@@ -272,7 +272,7 @@ func upload(cmd *cobra.Command, args []string) error {
 			// is it possible that the HTTP client is reusing connections so is being blocked?
 			target := args[0]
 			if randomTargetFlag {
-				target = uuid.New()
+				target += uuid.New()
 			}
 			req, err := http.NewRequest("PUT", dataAddr+target, lfd)
 			if err != nil {
@@ -378,6 +378,6 @@ func init() {
 	uploadCmd.Flags().IntVar(&bsFlag, "bs", 1024, "The number of bytes of each block")
 	uploadCmd.Flags().StringVar(&checksumFlag, "checksum", "", "The checksum for the file")
 	uploadCmd.Flags().BoolVar(&cernDistributionFlag, "cern-distribution", false, "Use file sizes that follow the distribution found on CERNBox")
-	uploadCmd.Flags().BoolVar(&randomTargetFlag, "random-target", false, "Overwrite the received filename to use a random one")
+	uploadCmd.Flags().BoolVar(&randomTargetFlag, "random-target", false, "Add a random value to the upload target filename")
 
 }
