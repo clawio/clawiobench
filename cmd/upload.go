@@ -16,6 +16,7 @@ package cmd
 
 import (
 	"bytes"
+	"code.google.com/p/go-uuid/uuid"
 	"encoding/csv"
 	"fmt"
 	"github.com/cheggaaa/pb"
@@ -32,6 +33,7 @@ var countFlag int
 var bsFlag int
 var checksumFlag string
 var cernDistributionFlag bool
+var randomTargetFlag bool
 
 var uploadCmd = &cobra.Command{
 	Use:   "upload",
@@ -268,7 +270,11 @@ func upload(cmd *cobra.Command, args []string) error {
 			c := &http.Client{} // connections are reused if we reuse the client
 			// PUT will close the fd
 			// is it possible that the HTTP client is reusing connections so is being blocked?
-			req, err := http.NewRequest("PUT", dataAddr+args[0], lfd)
+			target := args[0]
+			if randomTargetFlag {
+				target = uuid.New()
+			}
+			req, err := http.NewRequest("PUT", dataAddr+target, lfd)
 			if err != nil {
 				errChan <- err
 				return
@@ -372,5 +378,6 @@ func init() {
 	uploadCmd.Flags().IntVar(&bsFlag, "bs", 1024, "The number of bytes of each block")
 	uploadCmd.Flags().StringVar(&checksumFlag, "checksum", "", "The checksum for the file")
 	uploadCmd.Flags().BoolVar(&cernDistributionFlag, "cern-distribution", false, "Use file sizes that follow the distribution found on CERNBox")
+	uploadCmd.Flags().BoolVar(&randomTargetFlag, "random-target", false, "Overwrite the received filename to use a random one")
 
 }
