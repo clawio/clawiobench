@@ -16,7 +16,6 @@ package cmd
 
 import (
 	"bytes"
-	"code.google.com/p/go-uuid/uuid"
 	"fmt"
 	"github.com/cheggaaa/pb"
 	"github.com/spf13/cobra"
@@ -122,19 +121,20 @@ func upload(cmd *cobra.Command, args []string) error {
 	c := &http.Client{} // connections are reused if we reuse the client
 	for i := 0; i < probesFlag; i++ {
 		go func() {
-			workerID := uuid.New()
+			if err != nil {
+				errChan <- err
+				return
+			}
 			<-limitChan
 			defer func() {
-				log.WithField("workerid", workerID).Info("END")
 				limitChan <- 1
 			}()
-
-			log.WithField("workerid", workerID).Info("START")
 
 			// open again the file
 			lfd, err := os.Open(fn)
 			if err != nil {
 				errChan <- err
+				return
 			}
 			// PUT will close the fd
 			// is it possible that the HTTP client is reusing connections so is being blocked?
@@ -166,7 +166,7 @@ func upload(cmd *cobra.Command, args []string) error {
 				return
 			}
 
-			doneChan <- workerID
+			doneChan <- ""
 			return
 		}()
 	}
