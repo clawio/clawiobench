@@ -48,6 +48,10 @@
 			"Rev": "281073eb9eb092240d33ef253c404f1cca550309"
 		},
 		{
+			"ImportPath": "github.com/nu7hatch/gouuid",
+			"Rev": "179d4d0c4d8d407a32af483c2354df1d2c91e6c3"
+		},
+		{
 			"ImportPath": "github.com/russross/blackfriday",
 			"Comment": "v1.4-2-g300106c",
 			"Rev": "300106c228d52c8941d4b3de6054a6062a86dda3"

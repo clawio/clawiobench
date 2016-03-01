@@ -22,7 +22,6 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-	"os"
 	"time"
 )
 
@@ -101,8 +100,7 @@ func stat(cmd *cobra.Command, args []string) error {
 			if progressBar {
 				bar.Increment()
 			}
-		case res := <-resChan:
-			log.Printf("Worker %s has finished", res)
+		case _ = <-resChan:
 		case err := <-errChan:
 			log.Error(err)
 			errorProbes++
@@ -131,7 +129,7 @@ func stat(cmd *cobra.Command, args []string) error {
 		{"#NUMBER", "CONCURRENCY", "TIME", "FAILED", "FREQ", "PERIOD"},
 		{fmt.Sprintf("%d", numberRequests), fmt.Sprintf("%d", concurrency), fmt.Sprintf("%f", totalTime), fmt.Sprintf("%d", failedRequests), fmt.Sprintf("%f", frequency), fmt.Sprintf("%f", period)},
 	}
-	w := csv.NewWriter(os.Stdout)
+	w := csv.NewWriter(output)
 	w.Comma = ' '
 	for _, d := range data {
 		if err := w.Write(d); err != nil {

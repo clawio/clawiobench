@@ -16,10 +16,13 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/csv"
 	"fmt"
 	"github.com/cheggaaa/pb"
+	"github.com/nu7hatch/gouuid"
 	"github.com/spf13/cobra"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"os"
 	"path"
@@ -28,6 +31,9 @@ import (
 
 var countFlag int
 var bsFlag int
+var checksumFlag string
+var cernDistributionFlag bool
+var randomTargetFlag bool
 
 var uploadCmd = &cobra.Command{
 	Use:   "upload",
@@ -46,7 +52,7 @@ approach used by dd.`,
 func createFile(fn, char string, count, bs int) (*os.File, error) {
 	var fd *os.File
 	if fn == "" {
-		tf, err := ioutil.TempFile("", "clawiobench-")
+		tf, err := ioutil.TempFile("", "CLAWIOBENCH-")
 		if err != nil {
 			return nil, err
 		}
@@ -73,6 +79,117 @@ func createFile(fn, char string, count, bs int) (*os.File, error) {
 	return fd, nil
 }
 
+// This is the distribution of files at CERN
+func createCERNDistribution() ([]string, error) {
+	fds := []*os.File{}
+	fns := []string{}
+	fd50MB, err := createFile("testfile-50MB", "1", 1024, 1024*50)
+	if err != nil {
+		return fns, err
+	}
+	fds = append(fds, fd50MB)
+
+	fd15MB, err := createFile("testfile-15MB", "1", 1024, 1024*15)
+	if err != nil {
+		return fns, err
+	}
+	fds = append(fds, fd15MB)
+
+	fd8MB, err := createFile("testfile-8MB", "1", 1024, 1024*8)
+	if err != nil {
+		return fns, err
+	}
+	fds = append(fds, fd8MB)
+
+	fd10MB, err := createFile("testfile-8MB", "1", 1024, 1024*10)
+	if err != nil {
+		return fns, err
+	}
+	fds = append(fds, fd10MB)
+
+	fd5MB, err := createFile("testfile-5MB", "1", 1024, 1024*5)
+	if err != nil {
+		return fns, err
+	}
+	fds = append(fds, fd5MB)
+
+	fd4MB, err := createFile("testfile-4MB", "1", 1024, 1024*4)
+	if err != nil {
+		return fns, err
+	}
+	fds = append(fds, fd4MB)
+
+	fd3MB, err := createFile("testfile-3MB", "1", 1024, 1024*3)
+	if err != nil {
+		return fns, err
+	}
+	fds = append(fds, fd3MB)
+
+	fd2MB, err := createFile("testfile-2MB", "1", 1024, 1024*2)
+	if err != nil {
+		return fns, err
+	}
+	fds = append(fds, fd2MB)
+
+	fd1MB, err := createFile("testfile-1MB", "1", 1024, 1024)
+	if err != nil {
+		return fns, err
+	}
+	fds = append(fds, fd1MB)
+
+	for i := 0; i < 11; i++ {
+		fn := fmt.Sprintf("testfile-500KB-%d", i)
+		fd, err := createFile(fn, "1", 1024, 500)
+		if err != nil {
+			return fns, err
+		}
+		fds = append(fds, fd)
+	}
+
+	for i := 0; i < 32; i++ {
+		fn := fmt.Sprintf("testfile-50KB-%d", i)
+		fd, err := createFile(fn, "1", 1024, 50)
+		if err != nil {
+			return fns, err
+		}
+		fds = append(fds, fd)
+	}
+
+	for i := 0; i < 28; i++ {
+		fn := fmt.Sprintf("testfile-5KB-%d", i)
+		fd, err := createFile(fn, "1", 1024, 5)
+		if err != nil {
+			return fns, err
+		}
+		fds = append(fds, fd)
+	}
+
+	for i := 0; i < 15; i++ {
+		fn := fmt.Sprintf("testfile-1KB-%d", i)
+		fd, err := createFile(fn, "1", 1024, 1)
+		if err != nil {
+			return fns, err
+		}
+		fds = append(fds, fd)
+	}
+
+	for i := 0; i < 5; i++ {
+		fn := fmt.Sprintf("testfile-100B-%d", i)
+		fd, err := createFile(fn, "1", 1, 100)
+		if err != nil {
+			return fns, err
+		}
+		fds = append(fds, fd)
+	}
+
+	for _, v := range fds {
+		fns = append(fns, v.Name())
+		v.Close()
+	}
+
+	return fns, nil
+}
+
 func upload(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
 		cmd.Help()
@@ -92,16 +209,27 @@ func upload(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fd, err := createFile("", "1", countFlag, bsFlag) // 1GB file
-	if err != nil {
-		log.Error(err)
-		return err
+	var fns []string
+	if cernDistributionFlag {
+		vals, err := createCERNDistribution()
+		if err != nil {
+			return err
+		}
+		fns = vals
+	} else {
+		fd, err := createFile(fmt.Sprintf("testfile-manual-count-%d-bs-%d", countFlag, bsFlag), "1", countFlag, bsFlag)
+		if err != nil {
+			return err
+		}
+		fns = []string{fd.Name()}
+		fd.Close()
 	}
-	defer fd.Close()
 
-	fn := fd.Name()
-	fmt.Println("Test file is " + fn)
-	fmt.Printf("File size is %d megabytes\n", countFlag*bsFlag/1024/1024)
+	defer func() {
+		for _, v := range fns {
+			os.RemoveAll(v)
+		}
+	}()
 
 	benchStart := time.Now()
 
@@ -109,22 +237,24 @@ func upload(cmd *cobra.Command, args []string) error {
 	errorProbes := 0
 
 	errChan := make(chan error)
-	doneChan := make(chan string)
+	resChan := make(chan string)
+	doneChan := make(chan bool)
 	limitChan := make(chan int, concurrencyFlag)
 
 	for i := 0; i < concurrencyFlag; i++ {
 		limitChan <- 1
 	}
 
-	bar := pb.StartNew(probesFlag)
+	var bar *pb.ProgressBar
+	if progressBar {
+		fmt.Printf("There are %d possible files to upload\n", len(fns))
+		bar = pb.StartNew(probesFlag)
+	}
 
-	c := &http.Client{} // connections are reused if we reuse the client
 	for i := 0; i < probesFlag; i++ {
-		go func() {
-			if err != nil {
-				errChan <- err
-				return
-			}
+		rand.Seed(time.Now().UnixNano())
+		filename := fns[rand.Intn(len(fns))]
+		go func(fn string) {
 			<-limitChan
 			defer func() {
 				limitChan <- 1
@@ -136,9 +266,21 @@ func upload(cmd *cobra.Command, args []string) error {
 				errChan <- err
 				return
 			}
+			defer lfd.Close()
+
+			c := &http.Client{} // connections are reused if we reuse the client
 			// PUT will close the fd
 			// is it possible that the HTTP client is reusing connections so is being blocked?
-			req, err := http.NewRequest("PUT", dataAddr+args[0], lfd)
+			target := args[0]
+			if randomTargetFlag {
+				rawUUID, err := uuid.NewV4()
+				if err != nil {
+					errChan <- err
+					return
+				}
+				target += rawUUID.String()
+			}
+			req, err := http.NewRequest("PUT", dataAddr+target, lfd)
 			if err != nil {
 				errChan <- err
 				return
@@ -146,7 +288,7 @@ func upload(cmd *cobra.Command, args []string) error {
 
 			req.Header.Add("Content-Type", "application/octet-stream")
 			req.Header.Add("Authorization", "Bearer "+token)
-			//req.Header.Add("CIO-Checksum", checksumFlag)
+			req.Header.Add("CIO-Checksum", checksumFlag)
 
 			res, err := c.Do(req)
 			if err != nil {
@@ -166,21 +308,27 @@ func upload(cmd *cobra.Command, args []string) error {
 				return
 			}
 
-			doneChan <- ""
+			doneChan <- true
+			resChan <- ""
 			return
-		}()
+		}(filename)
 	}
 
 	for {
 		select {
 		case _ = <-doneChan:
 			total++
-			bar.Increment()
+			if progressBar {
+				bar.Increment()
+			}
+		case _ = <-resChan:
 		case err := <-errChan:
 			log.Error(err)
 			errorProbes++
 			total++
-			bar.Increment()
+			if progressBar {
+				bar.Increment()
+			}
 		}
 
 		if total == probesFlag {
@@ -188,18 +336,34 @@ func upload(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	bar.Finish()
+	if progressBar {
+		bar.Finish()
+	}
 
-	benchEnd := time.Since(benchStart)
-	fmt.Printf("Total number of probes: %d\n", probesFlag)
-	fmt.Printf("Concurrency level: %d\n", concurrencyFlag)
-	fmt.Printf("Failed ops: %d\n", errorProbes)
-	fmt.Printf("Total time spent: %f s\n", benchEnd.Seconds())
-	fmt.Printf("Ops rate: %f Hz\n", float64(probesFlag)/benchEnd.Seconds())
-	fmt.Printf("Average time per op: %f s\n", benchEnd.Seconds()/float64(probesFlag))
+	numberRequests := probesFlag
+	concurrency := concurrencyFlag
+	totalTime := time.Since(benchStart).Seconds()
+	failedRequests := errorProbes
+	frequency := float64(numberRequests-failedRequests) / totalTime
+	period := float64(1 / frequency)
+	volume := numberRequests * countFlag * bsFlag / 1024 / 1024
+	throughput := float64(volume) / totalTime
+	data := [][]string{
+		{"#NUMBER", "CONCURRENCY", "TIME", "FAILED", "FREQ", "PERIOD", "VOLUME", "THROUGHPUT"},
+		{fmt.Sprintf("%d", numberRequests), fmt.Sprintf("%d", concurrency), fmt.Sprintf("%f", totalTime), fmt.Sprintf("%d", failedRequests), fmt.Sprintf("%f", frequency), fmt.Sprintf("%f", period), fmt.Sprintf("%d", volume), fmt.Sprintf("%f", throughput)},
+	}
+	w := csv.NewWriter(output)
+	w.Comma = ' '
+	for _, d := range data {
+		if err := w.Write(d); err != nil {
+			return err
+		}
+	}
+	w.Flush()
 
-	fmt.Printf("Data volume uploaded: %d megabytes\n", countFlag*bsFlag*probesFlag/1024/1024)
-	fmt.Printf("Average upload speed: %f megabytes/s\n", float64((countFlag*bsFlag*probesFlag/1024/1024))/benchEnd.Seconds())
+	if err := w.Error(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -218,5 +382,8 @@ func init() {
 
 	uploadCmd.Flags().IntVar(&countFlag, "count", 1024, "The number of blocks of the file")
 	uploadCmd.Flags().IntVar(&bsFlag, "bs", 1024, "The number of bytes of each block")
+	uploadCmd.Flags().StringVar(&checksumFlag, "checksum", "", "The checksum for the file")
+	uploadCmd.Flags().BoolVar(&cernDistributionFlag, "cern-distribution", false, "Use file sizes that follow the distribution found on CERNBox")
+	uploadCmd.Flags().BoolVar(&randomTargetFlag, "random-target", false, "Add a random value to the upload target filename")
 
 }
